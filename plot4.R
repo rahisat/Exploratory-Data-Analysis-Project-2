@@ -1,50 +1,55 @@
-## libraries
-require(ggplot2)
+## Script Name: plot4.R
+
+## Libraries needed:
+library(plyr)
+library(ggplot2)
 
 ## set work dir
-setwd("/Users/satrahi/Documents/course4_project2/")
-
+setwd("/Users/satrahi/Documents/")
 ## -----------------------------------------------------------------------------
-## get data
+## Step 1: read in the data
 ## -----------------------------------------------------------------------------
-# read national emission inventory data (NEI)
-fileNEI = "exdata-data-NEI_data/summarySCC_PM25.rds"
-NEI <- readRDS(fileNEI)
+NEI <- readRDS("exdata-data-NEI_data/summarySCC_PM25.rds")
+SCC <- readRDS("exdata-data-NEI_data/Source_Classification_Code.rds")
 
-# read source classification codes (SCC)
-fileSCC = "exdata-data-NEI_data/Source_Classification_Code.rds"
-SCC <- readRDS(fileSCC)
+## Step 2: subset our data for only coal-combustion
+coalcomb.scc <- subset(SCC, EI.Sector %in% c("Fuel Comb - Comm/Instutional - Coal", 
+                                             "Fuel Comb - Electric Generation - Coal", "Fuel Comb - Industrial Boilers, ICEs - 
+                                             Coal"))
 
-## -----------------------------------------------------------------------------
-## elaborate plotdata:  coal combustion-related sources emission for USA 
-## agregated per year
-## -----------------------------------------------------------------------------
-# select the coal related sources, using Short.Name as EI.Sector exclude some
-coalSource <- SCC[grepl("[Cc]oal", SCC$Short.Name),]
+## Step 3: comparisons so that we didn't ommit anything weird
+coalcomb.scc1 <- subset(SCC, grepl("Comb", Short.Name) & grepl("Coal", Short.Name))
 
-# select NEI data based on coal sources
-coalNEI <- subset(NEI, NEI$SCC %in% coalSource$SCC)
+nrow(coalcomb.scc) #evaluate: rows 0
 
-# De-duplicate the data?
-#coalNEI <- coalNEI[!duplicated(coalNEI),]
+nrow(coalcomb.scc1) #evaluate: rows 91
 
-plotdata <- aggregate(coalNEI[c("Emissions")], 
-                      list(year = coalNEI$year), sum)
+## Step 4: set the differences 
+dif1 <- setdiff(coalcomb.scc$SCC, coalcomb.scc1$SCC)
+dif2 <- setdiff(coalcomb.scc1$SCC, coalcomb.scc$SCC)
 
-## -----------------------------------------------------------------------------
-## create plot
-## -----------------------------------------------------------------------------
-## create file
-png('plot4.png', width=480, height=480)
+length(dif1)#0
 
-## plot data
-p <- ggplot(plotdata, aes(x=year, y=Emissions, colour=type)) +
-  # fade out the points so you will see the line
-  geom_point(alpha=0.1) +
-  # use loess as there are many datapoints
-  geom_smooth(method="loess") +
-  ggtitle("Total coal sourced Emission in the US 1999-2008")
-print(p)
+length(dif2)#91
 
-## close device
+##Based on other coursera courses and previous history...
+###it's time to look at the union of these sets
+coalcomb.codes <- union(coalcomb.scc$SCC, coalcomb.scc1$SCC)
+length(coalcomb.codes) #91
+
+## Step 5: subset again for what we want
+coal.comb <- subset(NEI, SCC %in% coalcomb.codes)
+
+##Step 6: get the PM25 values as well
+coalcomb.pm25year <- ddply(coal.comb, .(year, type), function(x) sum(x$Emissions))
+
+#rename the col
+colnames(coalcomb.pm25year)[3] <- "Emissions"
+
+##Step 7: finally plot4.png prepare to plot to png
+png("course4_project2/plot4.png")
+qplot(year, Emissions, data=coalcomb.pm25year, color=type, geom="line") + stat_summary(fun.y = "sum", fun.ymin = "sum", fun.ymax = "sum", color = "purple", aes(shape="total"), geom="line") + geom_line(aes(size="total", shape = NA)) + ggtitle(expression("Coal Combustion" ~ PM[2.5] ~ "Emissions by Source Type and Year")) + xlab("Year") + ylab(expression("Total" ~ PM[2.5] ~ "Emissions (tons)"))
 dev.off()
+
+## Step 8: prepare to plot to markdown
+qplot(year, Emissions, data=coalcomb.pm25year, color=type, geom="line") + stat_summary(fun.y = "sum", fun.ymin = "sum", fun.ymax = "sum", color = "purple", aes(shape="total"), geom="line") + geom_line(aes(size="total", shape = NA)) + ggtitle(expression("Coal Combustion" ~ PM[2.5] ~ "Emissions by Source Type and Year")) + xlab("Year") + ylab(expression("Total" ~ PM[2.5] ~ "Emissions (tons)"))
